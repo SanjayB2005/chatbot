@@ -32,31 +32,61 @@ class GeminiService:
     async def get_google_access_token(self):
         """Get Google Cloud access token"""
         try:
-            # Try to get credentials from environment
             credentials = None
             
-            # Check if service account key file is specified
-            service_account_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            if service_account_path and os.path.exists(service_account_path):
+            # Option 1: Try environment variables first (for Render deployment)
+            if os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL") and os.getenv("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY"):
                 from google.oauth2 import service_account
-                credentials = service_account.Credentials.from_service_account_file(
-                    service_account_path,
+                import json
+                
+                service_account_info = {
+                    "type": "service_account",
+                    "project_id": os.getenv("GOOGLE_SERVICE_ACCOUNT_PROJECT_ID", self.project_id),
+                    "private_key_id": os.getenv("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_ID", ""),
+                    "private_key": os.getenv("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY").replace('\\n', '\n'),
+                    "client_email": os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
+                    "client_id": os.getenv("GOOGLE_SERVICE_ACCOUNT_CLIENT_ID", ""),
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{os.getenv('GOOGLE_SERVICE_ACCOUNT_EMAIL')}"
+                }
+                
+                credentials = service_account.Credentials.from_service_account_info(
+                    service_account_info,
                     scopes=['https://www.googleapis.com/auth/cloud-platform']
                 )
+                print("✅ Using service account credentials from environment variables")
+            
+            # Option 2: Try service account key file
+            elif os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+                service_account_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+                if os.path.exists(service_account_path):
+                    from google.oauth2 import service_account
+                    credentials = service_account.Credentials.from_service_account_file(
+                        service_account_path,
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+                    print("✅ Using service account credentials from file")
+            
+            # Option 3: Try default credentials (ADC)
             else:
-                # Try default credentials (ADC)
                 credentials, project = google.auth.default(
                     scopes=['https://www.googleapis.com/auth/cloud-platform']
                 )
+                print("✅ Using default application credentials")
             
-            credentials.refresh(Request())
-            return credentials.token
+            if credentials:
+                credentials.refresh(Request())
+                return credentials.token
+            else:
+                raise Exception("No valid credentials found")
             
         except Exception as e:
-            print(f"Error getting Google access token: {str(e)}")
+            print(f"❌ Error getting Google access token: {str(e)}")
             print("Please set up Google Cloud authentication:")
-            print("1. Create a service account key file")
-            print("2. Set GOOGLE_APPLICATION_CREDENTIALS in .env file")
+            print("1. Set environment variables for service account")
+            print("2. Or set GOOGLE_APPLICATION_CREDENTIALS to key file path")
             print("3. Or run: gcloud auth application-default login")
             return None
     
