@@ -6,8 +6,9 @@ import os
 import uvicorn
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables - try .env.local first, then .env
+load_dotenv('.env.local')  # Load local secrets first
+load_dotenv()  # Load .env as fallback
 
 # Create FastAPI app
 app = FastAPI(

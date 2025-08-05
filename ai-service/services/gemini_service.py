@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 import google.auth
 from google.auth.transport.requests import Request
 
-load_dotenv()
+load_dotenv('.env.local')  # Load local secrets first
+load_dotenv()  # Load .env as fallback
 
 class GeminiService:
     def __init__(self):

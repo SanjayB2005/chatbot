@@ -8,18 +8,23 @@ Your push was blocked because the `service-account-key.json` file contains sensi
 
 ### Step 1: Set Up Environment Variables
 
-1. **Copy the example environment file:**
-   ```bash
-   cp ai-service/.env.example ai-service/.env
+1. **Your environment is already configured!**
+   - The `.env.local` file contains your actual API keys and secrets
+   - The `.env` file contains only placeholder values (safe for git)
+   - Python services automatically load `.env.local` first, then `.env` as fallback
+
+2. **File Structure:**
+   ```
+   ai-service/
+   ├── .env              ← Placeholder values (tracked by git)
+   ├── .env.local        ← Your actual secrets (ignored by git)
+   └── service-account-key.json ← Your Google Cloud key (ignored by git)
    ```
 
-2. **Add your actual credentials to `ai-service/.env`:**
+3. **Verify your setup:**
    ```bash
-   # Required: Your Gemini API Key
-   GEMINI_API_KEY=your_actual_gemini_api_key_here
-   
-   # Required: Google Cloud Authentication
-   GOOGLE_APPLICATION_CREDENTIALS=ai-service/service-account-key.json
+   cd ai-service
+   python -c "import os; from dotenv import load_dotenv; load_dotenv('.env.local'); load_dotenv(); print('API Key loaded:', 'Yes' if os.getenv('GEMINI_API_KEY', '').startswith('AIza') else 'No')"
    ```
 
 ### Step 2: Keep Your Service Account Key Secure

@@ -38,6 +38,9 @@ yarn-error.log*
 
 # Environment variables
 .env
+.env.*
+**/.env
+**/.env.*
 .env.local
 .env.development.local
 .env.test.local
@@ -47,6 +50,11 @@ yarn-error.log*
 **/service-account-key.json
 **/*service-account*.json
 **/*credentials*.json
+
+# API Keys and Secrets (NEVER commit these!)
+**/*api-key*
+**/*secret*
+**/*credentials*
 
 # Database
 *.db
