@@ -12,6 +12,10 @@ load_dotenv()  # Load .env as fallback
 
 class GeminiService:
     def __init__(self):
+        # Reload environment variables
+        load_dotenv()
+        load_dotenv('.env.local')  # Load local secrets as override
+        
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not self.gemini_api_key:
             raise ValueError("GEMINI_API_KEY not found in environment variables")
@@ -20,11 +24,14 @@ class GeminiService:
         genai.configure(api_key=self.gemini_api_key)
         self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
         
-        # Google Discovery Engine configuration
-        self.project_id = os.getenv("GOOGLE_PROJECT_ID", "953445234871")
+        # Google Discovery Engine configuration - use correct project ID
+        self.project_id = os.getenv("GOOGLE_PROJECT_ID", "hackrx-467207")
         self.engine_id = os.getenv("DISCOVERY_ENGINE_ID", "bajajai_1753609382263")
         self.location = os.getenv("DISCOVERY_LOCATION", "global")
         self.collection = os.getenv("DISCOVERY_COLLECTION", "default_collection")
+        
+        print(f"🔧 Initialized with Project ID: {self.project_id}")
+        print(f"🔧 Engine ID: {self.engine_id}")
         
         # Discovery Engine endpoint
         self.discovery_endpoint = f"https://discoveryengine.googleapis.com/v1alpha/projects/{self.project_id}/locations/{self.location}/collections/{self.collection}/engines/{self.engine_id}/servingConfigs/default_search:search"
@@ -57,6 +64,14 @@ class GeminiService:
                     scopes=['https://www.googleapis.com/auth/cloud-platform']
                 )
                 print("✅ Using service account credentials from environment variables")
+                print(f"🔧 Service account project: {service_account_info['project_id']}")
+                
+                # Use the service account's project ID for Discovery Engine
+                self.project_id = service_account_info['project_id']
+                print(f"🔄 Updated project ID to: {self.project_id}")
+                
+                # Update the discovery endpoint with correct project ID
+                self.discovery_endpoint = f"https://discoveryengine.googleapis.com/v1alpha/projects/{self.project_id}/locations/{self.location}/collections/{self.collection}/engines/{self.engine_id}/servingConfigs/default_search:search"
             
             # Option 2: Try service account key file
             elif os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
