@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-// Use explicit localhost for browser direct access
-const API_BASE_URL = 'http://localhost:5173';
+// Use empty base URL to leverage Vite's proxy configuration
+// Vite will proxy /api requests to http://localhost:3003
+const API_BASE_URL = '';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
@@ -14,9 +15,9 @@ const apiClient = axios.create({
 // Request interceptor
 apiClient.interceptors.request.use(
     (config) => {
-        const fullUrl = `${config.baseURL || ''}${config.url}`;
+        const fullUrl = `${window.location.origin}${config.url}`;
         console.log(`🚀 Making ${config.method?.toUpperCase()} request to: ${fullUrl}`);
-        console.log('🔧 Full config:', { baseURL: config.baseURL, url: config.url });
+        console.log('🔧 Request will be proxied to: http://localhost:3003' + config.url);
         return config;
     },
     (error) => {
@@ -35,8 +36,9 @@ apiClient.interceptors.response.use(
         
         // Provide more specific error messages
         if (error.code === 'ERR_NETWORK') {
-            console.error('Network Error: Unable to connect to server. Using Vite proxy to localhost:3003');
+            console.error('Network Error: Unable to connect to backend server via Vite proxy');
             console.error('Make sure the backend server is running on port 3003');
+            console.error('Vite proxy should forward /api requests to http://localhost:3003');
         }
         
         return Promise.reject(error.response?.data || error);

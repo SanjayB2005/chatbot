@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, HTTPException, Depends, Header
 from typing import List, Optional
 from models.schemas import QuestionRequest, QuestionResponse, ChatMessage, ChatResponse
@@ -8,15 +9,24 @@ from datetime import datetime
 router = APIRouter()
 gemini_service = GeminiService()
 
+# Expected API key for authentication
+EXPECTED_API_KEY = os.getenv("API_SERVICE_KEY", "hackrx-secret-key-2024")
+
 async def verify_api_key(authorization: Optional[str] = Header(None)):
-    """Simple API key verification (you can enhance this as needed)"""
+    """API key verification"""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
     
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization format")
     
-    # You can add more sophisticated API key validation here
+    # Extract the token
+    token = authorization.replace("Bearer ", "")
+    
+    # Verify against expected API key
+    if token != EXPECTED_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
     return authorization
 
 @router.post("/hackrx/run", response_model=QuestionResponse)

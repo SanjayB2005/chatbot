@@ -24,17 +24,26 @@ class GeminiService:
         genai.configure(api_key=self.gemini_api_key)
         self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
         
-        # Google Discovery Engine configuration - use correct project ID
-        self.project_id = os.getenv("GOOGLE_PROJECT_ID", "hackrx-467207")
-        self.engine_id = os.getenv("DISCOVERY_ENGINE_ID", "bajajai_1753609382263")
+        # Google Discovery Engine configuration - MUST match your actual setup
+        self.project_id = os.getenv("GOOGLE_PROJECT_ID")
+        self.engine_id = os.getenv("DISCOVERY_ENGINE_ID")
         self.location = os.getenv("DISCOVERY_LOCATION", "global")
         self.collection = os.getenv("DISCOVERY_COLLECTION", "default_collection")
         
+        # Validate required environment variables
+        if not self.project_id:
+            raise ValueError("GOOGLE_PROJECT_ID environment variable is required")
+        if not self.engine_id:
+            raise ValueError("DISCOVERY_ENGINE_ID environment variable is required")
+        
         print(f"🔧 Initialized with Project ID: {self.project_id}")
         print(f"🔧 Engine ID: {self.engine_id}")
+        print(f"🔧 Location: {self.location}")
+        print(f"🔧 Collection: {self.collection}")
         
         # Discovery Engine endpoint
         self.discovery_endpoint = f"https://discoveryengine.googleapis.com/v1alpha/projects/{self.project_id}/locations/{self.location}/collections/{self.collection}/engines/{self.engine_id}/servingConfigs/default_search:search"
+        print(f"🔗 Discovery Endpoint: {self.discovery_endpoint}")
     
     async def get_google_access_token(self):
         """Get Google Cloud access token"""
@@ -119,17 +128,22 @@ class GeminiService:
             
             payload = {
                 "query": query,
-                "pageSize": 10,
+                "pageSize": 5,  # Reduced to get more focused results
                 "queryExpansionSpec": {"condition": "AUTO"},
                 "spellCorrectionSpec": {"mode": "AUTO"},
                 "languageCode": "en-US",
                 "contentSearchSpec": {
                     "extractiveContentSpec": {
-                        "maxExtractiveAnswerCount": 1
+                        "maxExtractiveAnswerCount": 3,
+                        "maxExtractiveSegmentCount": 1,
+                        "returnExtractiveSegmentScore": True
+                    },
+                    "summarySpec": {
+                        "summaryResultCount": 3,
+                        "includeCitations": True
                     }
                 },
-                "userInfo": {"timeZone": "Asia/Calcutta"},
-                "session": f"projects/{self.project_id}/locations/{self.location}/collections/{self.collection}/engines/{self.engine_id}/sessions/-"
+                "userInfo": {"timeZone": "Asia/Calcutta"}
             }
             
             print(f"🔍 Searching Discovery Engine with query: '{query}'")
@@ -149,32 +163,59 @@ class GeminiService:
                 result = response.json()
                 print(f"✅ Discovery Engine result structure: {list(result.keys())}")
                 
-                # Extract the most relevant content
+                # Extract the most relevant content from your trained data
                 if 'results' in result and result['results']:
                     print(f"📊 Found {len(result['results'])} results")
                     
-                    # Get extractive answers first
-                    if 'extractiveAnswers' in result['results'][0].get('document', {}):
-                        extractive_answers = result['results'][0]['document']['extractiveAnswers']
-                        if extractive_answers:
-                            answer = extractive_answers[0].get('content', '')
-                            print(f"🎯 Using extractive answer: {answer[:100]}...")
-                            return answer
+                    # Try to get summary first (most relevant)
+                    if 'summary' in result and result['summary'].get('summaryText'):
+                        summary_text = result['summary']['summaryText']
+                        print(f"🎯 Using summary: {summary_text[:100]}...")
+                        return summary_text
                     
-                    # Fallback to document content
-                    if 'derivedStructData' in result['results'][0].get('document', {}):
-                        derived_data = result['results'][0]['document']['derivedStructData']
-                        if 'extractive_answers' in derived_data:
-                            answer = derived_data['extractive_answers'][0].get('content', '')
-                            print(f"🎯 Using derived extractive answer: {answer[:100]}...")
-                            return answer
-                        elif 'snippets' in derived_data:
-                            answer = derived_data['snippets'][0].get('snippet', '')
-                            print(f"🎯 Using snippet: {answer[:100]}...")
-                            return answer
+                    # Get extractive answers from your documents
+                    for result_item in result['results']:
+                        document = result_item.get('document', {})
+                        
+                        # Check for extractive answers
+                        if 'extractiveAnswers' in document and document['extractiveAnswers']:
+                            extractive_answer = document['extractiveAnswers'][0].get('content', '')
+                            if extractive_answer.strip():
+                                print(f"🎯 Using extractive answer: {extractive_answer[:100]}...")
+                                return extractive_answer
+                        
+                        # Check derived structure data
+                        if 'derivedStructData' in document:
+                            derived_data = document['derivedStructData']
+                            
+                            # Try extractive answers from derived data
+                            if 'extractive_answers' in derived_data and derived_data['extractive_answers']:
+                                answer = derived_data['extractive_answers'][0].get('content', '')
+                                if answer.strip():
+                                    print(f"🎯 Using derived extractive answer: {answer[:100]}...")
+                                    return answer
+                            
+                            # Try snippets as fallback
+                            if 'snippets' in derived_data and derived_data['snippets']:
+                                snippet = derived_data['snippets'][0].get('snippet', '')
+                                if snippet.strip():
+                                    print(f"🎯 Using snippet: {snippet[:100]}...")
+                                    return snippet
+                        
+                        # Try struct data as last resort
+                        if 'structData' in document and document['structData']:
+                            struct_data = document['structData']
+                            if isinstance(struct_data, dict):
+                                # Look for common content fields
+                                for field in ['content', 'text', 'description', 'body']:
+                                    if field in struct_data and struct_data[field]:
+                                        content = str(struct_data[field])
+                                        if content.strip():
+                                            print(f"🎯 Using struct data {field}: {content[:100]}...")
+                                            return content
                 
-                print("⚠️ No relevant information found in the knowledge base.")
-                return "No relevant information found in the knowledge base."
+                print("⚠️ No relevant information found in your knowledge base.")
+                return "I couldn't find specific information about this in the knowledge base. Please ensure your question relates to the uploaded documents."
             else:
                 print(f"❌ Discovery Engine API error: {response.status_code} - {response.text}")
                 return f"Search service error: {response.status_code}"
@@ -184,34 +225,55 @@ class GeminiService:
             return f"Search error: {str(e)}"
     
     async def answer_questions(self, document_url: str, questions: List[str]) -> List[str]:
-        """Process questions using your trained Discovery Engine and Gemini"""
+        """Process questions using ONLY your trained Discovery Engine data"""
         try:
             answers = []
             
             for question in questions:
-                # First, search your Discovery Engine for relevant context
+                print(f"🔍 Processing question: {question}")
+                
+                # Search your Discovery Engine for relevant context
                 search_context = await self.search_discovery_engine(question)
                 
-                # Then use Gemini to generate a comprehensive answer
-                prompt = f"""
-                Based on the following context from the knowledge base, please provide a clear and accurate answer to the question.
-                
-                Context from Knowledge Base:
-                {search_context}
-                
-                Question: {question}
-                
-                Please provide a comprehensive answer based on the context. If the context doesn't contain enough information, please state that clearly.
-                """
-                
-                try:
-                    response = self.model.generate_content(prompt)
-                    answer = response.text.strip()
-                    answers.append(answer)
-                except Exception as e:
-                    print(f"Error generating answer for question '{question}': {str(e)}")
-                    # Fallback to just the search result
-                    answers.append(search_context if search_context else "Unable to generate answer for this question.")
+                # Only provide answers if we have relevant content from your knowledge base
+                if search_context and search_context.strip() and \
+                   not search_context.startswith("I couldn't find specific information"):
+                    
+                    # Use Gemini to refine the answer but stay strictly within the context
+                    prompt = f"""
+                    You are an AI assistant that ONLY answers based on the provided context from a specific knowledge base.
+                    
+                    STRICT INSTRUCTIONS:
+                    1. Answer ONLY using information from the context below
+                    2. If the context doesn't contain enough information, say "The knowledge base doesn't contain enough information to answer this question"
+                    3. Do NOT add general knowledge or assumptions
+                    4. Keep answers concise and directly related to the context
+                    
+                    Context from Knowledge Base:
+                    {search_context}
+                    
+                    Question: {question}
+                    
+                    Answer based STRICTLY on the context above:
+                    """
+                    
+                    try:
+                        response = self.model.generate_content(prompt)
+                        answer = response.text.strip()
+                        
+                        # Validate that the answer seems to be based on the context
+                        if "knowledge base doesn't contain" in answer.lower() or \
+                           "don't have information" in answer.lower():
+                            answers.append("The knowledge base doesn't contain specific information to answer this question.")
+                        else:
+                            answers.append(answer)
+                            
+                    except Exception as e:
+                        print(f"Error generating answer for question '{question}': {str(e)}")
+                        answers.append(search_context)  # Use the raw search result
+                else:
+                    # No relevant content found in your knowledge base
+                    answers.append("The knowledge base doesn't contain specific information to answer this question.")
                 
                 # Small delay to avoid rate limiting
                 await asyncio.sleep(0.1)
@@ -223,7 +285,7 @@ class GeminiService:
             return [f"Error processing questions: {str(e)}"] * len(questions)
     
     async def chat_response(self, message: str) -> str:
-        """Generate a chat response using Discovery Engine + Gemini"""
+        """Generate a chat response using ONLY your Discovery Engine knowledge base"""
         try:
             print(f"💬 Processing chat message: '{message}'")
             
@@ -231,27 +293,39 @@ class GeminiService:
             search_context = await self.search_discovery_engine(message)
             print(f"🔍 Knowledge base context: {search_context[:200]}...")
             
-            # Generate response using Gemini with the context
-            prompt = f"""
-            You are a helpful AI assistant with access to a specialized knowledge base. 
-            
-            Context from Knowledge Base:
-            {search_context}
-            
-            User Message: {message}
-            
-            Please provide a helpful response. If the knowledge base contains relevant information, use it. 
-            Otherwise, provide a general helpful response while mentioning that you can search the knowledge base for specific topics.
-            """
-            
-            print(f"🧠 Sending prompt to Gemini (length: {len(prompt)} characters)")
-            
-            response = self.model.generate_content(prompt)
-            final_response = response.text.strip()
-            
-            print(f"✅ Generated final response: {final_response[:200]}...")
-            return final_response
+            # Only respond if we have relevant content from your knowledge base
+            if search_context and search_context.strip() and \
+               not search_context.startswith("I couldn't find specific information"):
+                
+                # Generate response using Gemini but stay within the knowledge base context
+                prompt = f"""
+                You are a helpful AI assistant that answers ONLY based on a specific knowledge base.
+                
+                STRICT INSTRUCTIONS:
+                1. Answer ONLY using information from the context below
+                2. If the context doesn't fully answer the question, say "I can only provide information based on the knowledge base. Here's what I found:" and then provide what's available
+                3. Do NOT add general knowledge or make assumptions beyond the context
+                4. Be helpful but stay within the boundaries of the provided context
+                
+                Context from Knowledge Base:
+                {search_context}
+                
+                User Message: {message}
+                
+                Response based STRICTLY on the context above:
+                """
+                
+                print(f"🧠 Sending prompt to Gemini (length: {len(prompt)} characters)")
+                
+                response = self.model.generate_content(prompt)
+                final_response = response.text.strip()
+                
+                print(f"✅ Generated final response: {final_response[:200]}...")
+                return final_response
+            else:
+                # No relevant content found in knowledge base
+                return "I can only provide information based on the specific knowledge base I have access to. Your question doesn't match any content in the knowledge base. Please ask questions related to the uploaded documents or try rephrasing your question."
             
         except Exception as e:
             print(f"❌ Error generating chat response: {str(e)}")
-            return "I'm sorry, I encountered an error while processing your message. Please try again."
+            return "I'm sorry, I encountered an error while searching the knowledge base. Please try again."

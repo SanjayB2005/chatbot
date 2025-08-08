@@ -3,7 +3,11 @@ const axios = require('axios');
 class AIService {
     constructor() {
         this.baseURL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-        this.apiKey = 'your-api-key'; // This should be set from environment
+        this.apiKey = process.env.AI_SERVICE_API_KEY || 'your-api-key';
+        
+        if (this.apiKey === 'your-api-key') {
+            console.warn('⚠️ AI_SERVICE_API_KEY not set in environment variables');
+        }
     }
 
     async processQuestions(documentsUrl, questions) {
